@@ -1,14 +1,377 @@
-# A fast, small, safe, gradually typed embeddable scripting language derived from Lua
-#
-# https://github.com/luau-lang/luau
-# https://luau.org/
+-- StarterPlayerScripts > LocalScript
 
-# Code coverage
-coverage.out
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
 
-# Profiling
-profile.out
-profile.svg
+local OWNER_ID = 10764169900
+local localPlayer = Players.LocalPlayer
 
-# Time trace
-trace.json
+if localPlayer.UserId ~= OWNER_ID then return end
+
+-- State
+local highlightsActive = false
+local selectedColor = Color3.fromRGB(255, 80, 80)
+
+-- Helper functions
+local function highlightCharacter(character, color)
+    local existing = character:FindFirstChildOfClass("Highlight")
+    if existing then existing:Destroy() end
+    local h = Instance.new("Highlight")
+    h.FillColor = color
+    h.OutlineColor = Color3.fromRGB(255, 255, 255)
+    h.FillTransparency = 0.5
+    h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    h.Parent = character
+end
+
+local function removeHighlight(character)
+    local h = character:FindFirstChildOfClass("Highlight")
+    if h then h:Destroy() end
+end
+
+local function highlightAll()
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= localPlayer and player.Character then
+            highlightCharacter(player.Character, selectedColor)
+        end
+        player.CharacterAdded:Connect(function(char)
+            if highlightsActive then
+                task.wait(1)
+                highlightCharacter(char, selectedColor)
+            end
+        end)
+    end
+end
+
+local function removeAll()
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= localPlayer and player.Character then
+            removeHighlight(player.Character)
+        end
+    end
+end
+
+Players.PlayerAdded:Connect(function(player)
+    player.CharacterAdded:Connect(function(character)
+        if highlightsActive then
+            task.wait(1)
+            highlightCharacter(character, selectedColor)
+        end
+    end)
+end)
+
+-- UI Building
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "AdminPanel"
+screenGui.ResetOnSpawn = false
+screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+screenGui.Parent = localPlayer.PlayerGui
+
+-- Main Frame
+local mainFrame = Instance.new("Frame")
+mainFrame.Name = "MainFrame"
+mainFrame.Size = UDim2.new(0, 280, 0, 320)
+mainFrame.Position = UDim2.new(0.5, -140, 0.5, -160)
+mainFrame.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
+mainFrame.BorderSizePixel = 0
+mainFrame.Visible = false
+mainFrame.Parent = screenGui
+
+Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 12)
+
+-- Drop shadow
+local shadow = Instance.new("ImageLabel")
+shadow.Size = UDim2.new(1, 30, 1, 30)
+shadow.Position = UDim2.new(0, -15, 0, -15)
+shadow.BackgroundTransparency = 1
+shadow.Image = "rbxassetid://6014261993"
+shadow.ImageColor3 = Color3.fromRGB(0, 0, 0)
+shadow.ImageTransparency = 0.5
+shadow.ScaleType = Enum.ScaleType.Slice
+shadow.SliceCenter = Rect.new(49, 49, 450, 450)
+shadow.ZIndex = 0
+shadow.Parent = mainFrame
+
+-- Title bar
+local titleBar = Instance.new("Frame")
+titleBar.Size = UDim2.new(1, 0, 0, 48)
+titleBar.BackgroundColor3 = Color3.fromRGB(26, 26, 36)
+titleBar.BorderSizePixel = 0
+titleBar.Parent = mainFrame
+
+Instance.new("UICorner", titleBar).CornerRadius = UDim.new(0, 12)
+
+-- Fix bottom corners of title bar
+local titleBarFix = Instance.new("Frame")
+titleBarFix.Size = UDim2.new(1, 0, 0.5, 0)
+titleBarFix.Position = UDim2.new(0, 0, 0.5, 0)
+titleBarFix.BackgroundColor3 = Color3.fromRGB(26, 26, 36)
+titleBarFix.BorderSizePixel = 0
+titleBarFix.Parent = titleBar
+
+-- Accent line
+local accent = Instance.new("Frame")
+accent.Size = UDim2.new(0, 3, 0, 28)
+accent.Position = UDim2.new(0, 12, 0.5, -14)
+accent.BackgroundColor3 = Color3.fromRGB(99, 102, 241)
+accent.BorderSizePixel = 0
+accent.Parent = titleBar
+Instance.new("UICorner", accent).CornerRadius = UDim.new(0, 4)
+
+local titleLabel = Instance.new("TextLabel")
+titleLabel.Size = UDim2.new(1, -60, 1, 0)
+titleLabel.Position = UDim2.new(0, 24, 0, 0)
+titleLabel.BackgroundTransparency = 1
+titleLabel.TextColor3 = Color3.fromRGB(240, 240, 255)
+titleLabel.Text = "Admin Panel"
+titleLabel.Font = Enum.Font.GothamBold
+titleLabel.TextSize = 15
+titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+titleLabel.Parent = titleBar
+
+local ownerBadge = Instance.new("TextLabel")
+ownerBadge.Size = UDim2.new(0, 60, 0, 20)
+ownerBadge.Position = UDim2.new(1, -70, 0.5, -10)
+ownerBadge.BackgroundColor3 = Color3.fromRGB(99, 102, 241)
+ownerBadge.TextColor3 = Color3.fromRGB(255, 255, 255)
+ownerBadge.Text = "OWNER"
+ownerBadge.Font = Enum.Font.GothamBold
+ownerBadge.TextSize = 10
+ownerBadge.Parent = titleBar
+Instance.new("UICorner", ownerBadge).CornerRadius = UDim.new(0, 6)
+
+-- Content area
+local content = Instance.new("Frame")
+content.Size = UDim2.new(1, -24, 1, -68)
+content.Position = UDim2.new(0, 12, 0, 58)
+content.BackgroundTransparency = 1
+content.Parent = mainFrame
+
+local contentLayout = Instance.new("UIListLayout")
+contentLayout.SortOrder = Enum.SortOrder.LayoutOrder
+contentLayout.Padding = UDim.new(0, 10)
+contentLayout.Parent = content
+
+-- Section label
+local function makeSection(text, parent, order)
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1, 0, 0, 18)
+    label.BackgroundTransparency = 1
+    label.TextColor3 = Color3.fromRGB(130, 130, 160)
+    label.Text = text:upper()
+    label.Font = Enum.Font.GothamBold
+    label.TextSize = 10
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.LayoutOrder = order
+    label.Parent = parent
+    return label
+end
+
+-- Toggle button builder
+local function makeToggleButton(labelText, order, onToggle)
+    local container = Instance.new("Frame")
+    container.Size = UDim2.new(1, 0, 0, 52)
+    container.BackgroundColor3 = Color3.fromRGB(26, 26, 36)
+    container.BorderSizePixel = 0
+    container.LayoutOrder = order
+    container.Parent = content
+    Instance.new("UICorner", container).CornerRadius = UDim.new(0, 10)
+
+    local lbl = Instance.new("TextLabel")
+    lbl.Size = UDim2.new(1, -70, 1, 0)
+    lbl.Position = UDim2.new(0, 14, 0, 0)
+    lbl.BackgroundTransparency = 1
+    lbl.TextColor3 = Color3.fromRGB(220, 220, 240)
+    lbl.Text = labelText
+    lbl.Font = Enum.Font.Gotham
+    lbl.TextSize = 13
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    lbl.Parent = container
+
+    -- Toggle pill
+    local pill = Instance.new("Frame")
+    pill.Size = UDim2.new(0, 44, 0, 24)
+    pill.Position = UDim2.new(1, -56, 0.5, -12)
+    pill.BackgroundColor3 = Color3.fromRGB(50, 50, 65)
+    pill.BorderSizePixel = 0
+    pill.Parent = container
+    Instance.new("UICorner", pill).CornerRadius = UDim.new(1, 0)
+
+    local knob = Instance.new("Frame")
+    knob.Size = UDim2.new(0, 18, 0, 18)
+    knob.Position = UDim2.new(0, 3, 0.5, -9)
+    knob.BackgroundColor3 = Color3.fromRGB(180, 180, 200)
+    knob.BorderSizePixel = 0
+    knob.Parent = pill
+    Instance.new("UICorner", knob).CornerRadius = UDim.new(1, 0)
+
+    local active = false
+
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1, 0, 1, 0)
+    btn.BackgroundTransparency = 1
+    btn.Text = ""
+    btn.Parent = container
+
+    btn.MouseButton1Click:Connect(function()
+        active = not active
+        local goal = active and UDim2.new(1, -21, 0.5, -9) or UDim2.new(0, 3, 0.5, -9)
+        local pillColor = active and Color3.fromRGB(99, 102, 241) or Color3.fromRGB(50, 50, 65)
+        local knobColor = active and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(180, 180, 200)
+        TweenService:Create(knob, TweenInfo.new(0.2), {Position = goal}):Play()
+        TweenService:Create(pill, TweenInfo.new(0.2), {BackgroundColor3 = pillColor}):Play()
+        TweenService:Create(knob, TweenInfo.new(0.2), {BackgroundColor3 = knobColor}):Play()
+        onToggle(active)
+    end)
+
+    return container
+end
+
+-- Action button builder
+local function makeButton(labelText, order, color, callback)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1, 0, 0, 42)
+    btn.BackgroundColor3 = color
+    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    btn.Text = labelText
+    btn.Font = Enum.Font.GothamBold
+    btn.TextSize = 13
+    btn.BorderSizePixel = 0
+    btn.LayoutOrder = order
+    btn.Parent = content
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 10)
+
+    btn.MouseButton1Click:Connect(function()
+        TweenService:Create(btn, TweenInfo.new(0.1), {BackgroundColor3 = color:Lerp(Color3.new(0,0,0), 0.2)}):Play()
+        task.wait(0.1)
+        TweenService:Create(btn, TweenInfo.new(0.1), {BackgroundColor3 = color}):Play()
+        callback()
+    end)
+
+    return btn
+end
+
+-- Notification
+local function notify(title, message, success)
+    local notif = Instance.new("Frame")
+    notif.Size = UDim2.new(0, 260, 0, 60)
+    notif.Position = UDim2.new(1, -270, 1, -80)
+    notif.BackgroundColor3 = Color3.fromRGB(26, 26, 36)
+    notif.BorderSizePixel = 0
+    notif.Parent = screenGui
+    Instance.new("UICorner", notif).CornerRadius = UDim.new(0, 10)
+
+    local bar = Instance.new("Frame")
+    bar.Size = UDim2.new(0, 3, 0.7, 0)
+    bar.Position = UDim2.new(0, 10, 0.15, 0)
+    bar.BackgroundColor3 = success and Color3.fromRGB(99, 241, 130) or Color3.fromRGB(241, 99, 99)
+    bar.BorderSizePixel = 0
+    bar.Parent = notif
+    Instance.new("UICorner", bar).CornerRadius = UDim.new(0, 4)
+
+    local t = Instance.new("TextLabel")
+    t.Size = UDim2.new(1, -30, 0, 20)
+    t.Position = UDim2.new(0, 22, 0, 8)
+    t.BackgroundTransparency = 1
+    t.TextColor3 = Color3.fromRGB(240, 240, 255)
+    t.Text = title
+    t.Font = Enum.Font.GothamBold
+    t.TextSize = 12
+    t.TextXAlignment = Enum.TextXAlignment.Left
+    t.Parent = notif
+
+    local m = Instance.new("TextLabel")
+    m.Size = UDim2.new(1, -30, 0, 16)
+    m.Position = UDim2.new(0, 22, 0, 30)
+    m.BackgroundTransparency = 1
+    m.TextColor3 = Color3.fromRGB(150, 150, 175)
+    m.Text = message
+    m.Font = Enum.Font.Gotham
+    m.TextSize = 11
+    m.TextXAlignment = Enum.TextXAlignment.Left
+    m.Parent = notif
+
+    task.delay(3, function()
+        TweenService:Create(notif, TweenInfo.new(0.4), {Position = UDim2.new(1, 10, 1, -80)}):Play()
+        task.wait(0.4)
+        notif:Destroy()
+    end)
+end
+
+-- Build UI elements
+makeSection("HIGHLIGHTS", content, 1)
+
+makeToggleButton("Highlight All Players", 2, function(active)
+    highlightsActive = active
+    if active then
+        highlightAll()
+        notify("Highlights Enabled", "All players are now highlighted.", true)
+    else
+        removeAll()
+        notify("Highlights Removed", "All highlights cleared.", false)
+    end
+end)
+
+makeSection("ACTIONS", content, 3)
+
+makeButton("Refresh Highlights", 4, Color3.fromRGB(99, 102, 241), function()
+    if highlightsActive then
+        removeAll()
+        highlightAll()
+        notify("Refreshed", "Highlights have been refreshed.", true)
+    else
+        notify("Highlights Off", "Enable highlights first.", false)
+    end
+end)
+
+makeButton("Remove All Highlights", 5, Color3.fromRGB(180, 55, 55), function()
+    removeAll()
+    highlightsActive = false
+    notify("Cleared", "All highlights removed.", false)
+end)
+
+-- Hint label
+local hint = Instance.new("TextLabel")
+hint.Size = UDim2.new(1, 0, 0, 20)
+hint.Position = UDim2.new(0, 0, 1, -24)
+hint.BackgroundTransparency = 1
+hint.TextColor3 = Color3.fromRGB(80, 80, 100)
+hint.Text = "Right Shift to toggle"
+hint.Font = Enum.Font.Gotham
+hint.TextSize = 11
+hint.Parent = mainFrame
+
+-- Dragging
+local dragging, dragStart, startPos
+titleBar.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = true
+        dragStart = input.Position
+        startPos = mainFrame.Position
+    end
+end)
+UserInputService.InputChanged:Connect(function(input)
+    if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+        local delta = input.Position - dragStart
+        mainFrame.Position = UDim2.new(
+            startPos.X.Scale, startPos.X.Offset + delta.X,
+            startPos.Y.Scale, startPos.Y.Offset + delta.Y
+        )
+    end
+end)
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = false
+    end
+end)
+
+-- Toggle visibility
+local visible = false
+UserInputService.InputBegan:Connect(function(input, processed)
+    if processed then return end
+    if input.KeyCode == Enum.KeyCode.RightShift then
+        visible = not visible
+        mainFrame.Visible = visible
+    end
+end)
